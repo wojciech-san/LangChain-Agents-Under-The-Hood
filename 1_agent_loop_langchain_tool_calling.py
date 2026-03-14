@@ -36,7 +36,16 @@ def apply_discount(price:float,discount_tier:str)->float:
 #------ Agent Loop ------#
 @traceable(name="langchain-agent-loop")
 def run_agent(question:str):
-    pass
+    tools = [get_product_price, apply_discount]
+    tools_dict = {t.name:t for t in tools}
+
+    llm = init_chat_model(f"ollama:{MODEL}", temperature=0)
+    llm_with_tools = llm.bind_tools(tools)
+    print(f"Question: {question}")
+    print("="*50)
+
+
+
 
 if __name__ == "__main__":
     print("Hello LangChain Agents (.bind_tools)")
