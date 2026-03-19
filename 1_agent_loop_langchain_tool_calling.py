@@ -8,7 +8,7 @@ from langchain.messages import SystemMessage, HumanMessage,ToolMessage
 from langsmith import traceable
 
 MAX_ITERATIONS = 10
-MODEL = "gwen3:1.7b"
+MODEL = "qwen3:1.7b"
 
 #------ Tools (Langchain @tool decorator) ------#
 
@@ -40,9 +40,56 @@ def run_agent(question:str):
     tools_dict = {t.name:t for t in tools}
 
     llm = init_chat_model(f"ollama:{MODEL}", temperature=0)
+   
     llm_with_tools = llm.bind_tools(tools)
     print(f"Question: {question}")
     print("="*50)
+    messages = [
+        SystemMessage(
+        content = (
+            "You are a helpful shpopping assistant."
+            "You have access to the product catalog tool and a discount tool.\n\n"
+            "STRICT RULES - you must these exactly:\n"
+            "1. NEVER guess or assume any product price. "
+            "2. Only call apply_discount AFTER you have received "
+            "a price from get_product_price. Pass the exact price "
+            "returned by get_product_price - do NOT pass a made-up number.\n"
+            "3. NEVER calculate the discount yourself using math- ALWAYS use the apply_discount tool.\n"
+            "4. If the user does not specify a discount tier, ask them which tier to use - do NOT assume one.\n\n"
+        )),
+        HumanMessage(content=question),
+    ]
+
+    for iteration in range(1, MAX_ITERATIONS+1):
+        print(f"\n--- Iteration {iteration} ---")
+        
+        ai_message = llm_with_tools.invoke(messages)
+
+        total_calls = ai_message.tool_calls
+
+        if not total_calls:
+            print(f"\nFinal Answer: {ai_message.content}")
+            return ai_message.content
+        
+        total_call = total_calls[0]
+        tool_name = total_call.get("name")
+        tool_args = total_call.get("args",{})
+        total_call_id = total_call.get("id")
+
+        print(f"[Tool Selected] {tool_name} with args:  {tool_args}")
+
+        tool_to_use = tools_dict.get(tool_name)
+        if tool_to_use is None:
+            raise ValueError(f"Tool {tool_name} not found")
+        
+        observation = tool_to_use.invoke(tool_args)
+
+        print(f"[Tool Result] {observation} ")
+
+        messages.append(ai_message)
+        messages.append(ToolMessage(content=str(observation),tool_call_id=total_call_id))
+    print("Max iterations reached without a final answer.")
+    return None
 
 
 
